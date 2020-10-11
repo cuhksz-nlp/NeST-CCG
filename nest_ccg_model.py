@@ -1,21 +1,31 @@
 from __future__ import absolute_import, division, print_function
 
 import os
-
-import math
-
 import numpy as np
 import torch
 from torch import nn
-import torch.nn.functional as F
-from pytorch_pretrained_bert.file_utils import PYTORCH_PRETRAINED_BERT_CACHE
 
-from pytorch_pretrained_bert.modeling import (BertPreTrainedModel, BertModel)
+from pytorch_pretrained_bert.modeling import BertModel
 from pytorch_pretrained_bert.tokenization import BertTokenizer
+from nest_ccg_helper import read_tsv, load_json, save_json
+from torch.nn import CrossEntropyLoss
+import subprocess
 
-from torch.nn import CrossEntropyLoss, Softmax
-from supertagging_helper import read_tsv
+DEFAULT_HPARA = {
+    'max_seq_length': 300,
+    'use_bert': False,
+    'do_lower_case': False,
+    'use_weight': False,
+    'use_gcn': False,
+    'gcn_layer_number': 3,
+    'max_ngram_length': 5,
+    'use_in_chunk': False,
+    'use_cross_chunk': False,
 
+    # used for parsing
+    'clipping_top_n': 5,
+    'clipping_threshold': 0.0005,
+}
 
 class LayerNormalization(nn.Module):
     def __init__(self, d_hid, eps=1e-3, affine=True):
@@ -137,72 +147,60 @@ class GCNLayer(nn.Module):
         return output
 
 
-class Supertagger(nn.Module):
+class NeSTCCG(nn.Module):
 
-    def __init__(self, labelmap, args, gram2id=None, tag2id=None, type2id=None, strong_segments=None):
-        super(Supertagger, self).__init__()
-        self.spec = locals()
-        self.spec.pop("self")
-        self.spec.pop("__class__")
-        self.spec['args'] = args
-        self.tag2id = tag2id
+    def __init__(self, labelmap, hpara, model_path, gram2id=None, type2id=None):
+        super(NeSTCCG, self).__init__()
+
         self.gram2id = gram2id
         self.type2id = type2id
-        self.strong_segments = strong_segments
+
+        self.hpara = hpara
 
         self.labelmap = labelmap
         self.id2label = {v: k for k, v in self.labelmap.items()}
         self.num_labels = len(self.labelmap)
-        self.max_seq_length = args.max_seq_length
-        self.max_ngram_size = args.max_ngram_size
-        self.max_ngram_length = args.max_ngram_length
+        self.max_seq_length = self.hpara['max_seq_length']
 
-        self.gcn_layer_number = args.gcn_layer_number
-        self.use_weight = args.use_weight
+        self.gcn_layer_number = self.hpara['gcn_layer_number']
+        self.use_weight = self.hpara['use_weight']
+        self.max_ngram_length = self.hpara['max_ngram_length']
+        self.use_in_chunk = self.hpara['use_in_chunk']
+        self.use_cross_chunk = self.hpara['use_cross_chunk']
 
-        self.window_size = args.window_size
-        self.clipping_top_n = args.clipping_top_n
-        self.clipping_threshold = args.clipping_threshold
+        self.clipping_top_n = self.hpara['clipping_top_n']
+        self.clipping_threshold = self.hpara['clipping_threshold']
 
         self.bert_tokenizer = None
         self.bert = None
         self.xlnet_tokenizer = None
         self.xlnet = None
 
-        if args.use_bert:
-            cache_dir = args.cache_dir if args.cache_dir else os.path.join(str(PYTORCH_PRETRAINED_BERT_CACHE),
-                                                                           'distributed_{}'.format(args.local_rank))
-            self.bert_tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
-            self.bert = BertModel.from_pretrained(args.bert_model, cache_dir=cache_dir)
+        if self.hpara['use_bert']:
+            self.bert_tokenizer = BertTokenizer.from_pretrained(model_path, do_lower_case=self.hpara['do_lower_case'])
+            self.bert = BertModel.from_pretrained(model_path, cache_dir='')
             self.hidden_size = self.bert.config.hidden_size
             self.dropout = nn.Dropout(self.bert.config.hidden_dropout_prob)
-        elif args.use_xlnet:
-            raise ValueError()
-            # from pytorch_transformers import XLNetModel, XLNetTokenizer
-            # self.xlnet_tokenizer = XLNetTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
-            # self.xlnet = XLNetModel.from_pretrained(args.bert_model)
-            # hidden_size = self.bert.config.hidden_size
-            # self.dropout = nn.Dropout(self.bert.config.hidden_dropout_prob)
         else:
             raise ValueError()
 
-        self.classifier = nn.Linear(self.hidden_size, self.num_labels, bias=False)
+        if self.hpara['use_gcn']:
+            self.gcn = GCNModule(self.gcn_layer_number, self.hidden_size,
+                                 use_weight=self.use_weight,
+                                 output_all_layers=False)
+        else:
+            self.gcn = None
 
-        self.gcn = GCNModule(self.gcn_layer_number, self.hidden_size,
-                             use_weight=self.use_weight,
-                             output_all_layers=False)
+        self.classifier = nn.Linear(self.hidden_size, self.num_labels, bias=False)
 
         self.loss_fct = CrossEntropyLoss(ignore_index=0)
 
     def forward(self, input_ids, token_type_ids=None, attention_mask=None, labels=None, valid_ids=None,
-                attention_mask_label=None, word_seq=None, word_mask=None, tag_seq=None, tag_matrix=None,
-                adjacency_matrix=None, type_seq=None, type_matrix=None):
+                attention_mask_label=None,
+                adjacency_matrix=None):
 
         if self.bert is not None:
             sequence_output, _ = self.bert(input_ids, token_type_ids, attention_mask, output_all_encoded_layers=False)
-        elif self.xlnet is not None:
-            # sequence_output, _ = self.xlnet()
-            raise ValueError()
         else:
             raise ValueError()
 
@@ -214,41 +212,95 @@ class Supertagger(nn.Module):
 
         sequence_output = self.dropout(valid_output)
 
-        sequence_output = self.gcn(sequence_output, adjacency_matrix)
+        if self.gcn is not None:
+            sequence_output = self.gcn(sequence_output, adjacency_matrix)
 
-        # sequence_output = self.test_linear(sequence_output)
-        # sequence_output = nn.ReLU()(sequence_output)
         logits = self.classifier(sequence_output)
-        # logits = self.softmax(logits)
         total_loss = self.loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
         assert not torch.isnan(total_loss)
 
         return total_loss, logits
 
+    @staticmethod
+    def init_hyper_parameters(args):
+        hyper_parameters = DEFAULT_HPARA.copy()
+        hyper_parameters['max_seq_length'] = args.max_seq_length
+        hyper_parameters['use_bert'] = args.use_bert
+        hyper_parameters['do_lower_case'] = args.do_lower_case
+        hyper_parameters['use_weight'] = args.use_weight
+        hyper_parameters['use_gcn'] = args.use_gcn
+        hyper_parameters['gcn_layer_number'] = args.gcn_layer_number
+        hyper_parameters['max_ngram_length'] = args.max_ngram_length
+        hyper_parameters['use_in_chunk'] = args.use_in_chunk
+        hyper_parameters['use_cross_chunk'] = args.use_cross_chunk
+
+        hyper_parameters['clipping_top_n'] = args.clipping_top_n
+        hyper_parameters['clipping_threshold'] = args.clipping_threshold
+
+        return hyper_parameters
+
     @property
     def model(self):
         return self.state_dict()
 
     @classmethod
-    def from_spec(cls, spec, model):
-        spec = spec.copy()
-        res = cls(**spec)
-        res.load_state_dict(model)
+    def load_model(cls, model_path):
+        label_map = load_json(os.path.join(model_path, 'label_map.json'))
+        hpara = load_json(os.path.join(model_path, 'hpara.json'))
+
+        gram2id_path = os.path.join(model_path, 'gram2id.json')
+        gram2id = load_json(gram2id_path) if os.path.exists(gram2id_path) else None
+        gram2id = {tuple(k.split('`')): v for k, v in gram2id.items()}
+
+        type2id_path = os.path.join(model_path, 'type2id.json')
+        type2id = load_json(type2id_path) if os.path.exists(type2id_path) else None
+
+        res = cls(model_path=model_path, labelmap=label_map, hpara=hpara,
+                  gram2id=gram2id, type2id=type2id)
+        res.load_state_dict(torch.load(os.path.join(model_path, 'pytorch_model.bin')))
         return res
+
+    def save_model(self, output_dir, vocab_dir):
+        output_model_path = os.path.join(output_dir, 'pytorch_model.bin')
+        torch.save(self.state_dict(), output_model_path)
+
+        label_map_file = os.path.join(output_dir, 'label_map.json')
+
+        if not os.path.exists(label_map_file):
+            save_json(label_map_file, self.labelmap)
+
+            save_json(os.path.join(output_dir, 'hpara.json'), self.hpara)
+            if self.gram2id is not None:
+                gram2save = {'`'.join(list(k)): v for k, v in self.gram2id.items()}
+                save_json(os.path.join(output_dir, 'gram2id.json'), gram2save)
+            if self.type2id is not None:
+                save_json(os.path.join(output_dir, 'type2id.json'), self.type2id)
+
+            output_config_file = os.path.join(output_dir, 'config.json')
+            with open(output_config_file, "w", encoding='utf-8') as writer:
+                if self.bert:
+                    writer.write(self.bert.config.to_json_string())
+                else:
+                    raise ValueError()
+            output_bert_config_file = os.path.join(output_dir, 'bert_config.json')
+            command = 'cp ' + str(output_config_file) + ' ' + str(output_bert_config_file)
+            subprocess.run(command, shell=True)
+
+            if self.bert:
+                vocab_name = 'vocab.txt'
+            else:
+                raise ValueError()
+            vocab_path = os.path.join(vocab_dir, vocab_name)
+            command = 'cp ' + str(vocab_path) + ' ' + str(os.path.join(output_dir, vocab_name))
+            subprocess.run(command, shell=True)
 
     def load_data(self, data_path, flag):
         lines = read_tsv(data_path)
 
-        overlap_num = 0
-
         data = []
 
         for sentence, label, pos_tags, governor_index, relation_type in lines:
-            word_list = []
-            word_matching_position = []
-            tag_list = []
-            tag_matching_position = []
 
             if len(sentence) > self.max_seq_length:
                 continue
@@ -262,35 +314,48 @@ class Supertagger(nn.Module):
 
             type_list = None
 
-            s = [sentence[0]]
             n_b = []
-            # # use strong segments
-            for i in range(len(sentence) - 1):
-                ngram = (sentence[i].lower(), sentence[i+1].lower())
-                if ngram in self.strong_segments:
-                    s.append(sentence[i + 1])
-                else:
-                    n_b.append((i+1-len(s), i))
-                    s = [sentence[i + 1]]
-            if len(s) > 0:
-                n_b.append((len(sentence) - len(s), len(sentence) - 1))
+
+            # use lexicon
+            chunk_start = 0
+            chunk_end = 0
+
+            lower_sent = [w.lower() for w in sentence]
+            for i in range(len(lower_sent)):
+                for length in range(min(self.max_ngram_length, len(lower_sent) - i), 0, -1):
+                    ngram = tuple(lower_sent[i: i + length])
+                    if ngram in self.gram2id:
+                        if chunk_start <= i < chunk_end:
+                            chunk_end = max(chunk_end, i + length)
+                            continue
+                        else:
+                            if chunk_end > chunk_start:
+                                n_b.append((chunk_start, chunk_end - 1))
+                            chunk_start = i
+                            chunk_end = i + length
+            if chunk_end > chunk_start:
+                n_b.append((chunk_start, chunk_end - 1))
 
             ngram_index = []
-            for s, e in n_b:
-                if not s == e:
-                    for i in range(s, e+1):
-                        for j in range(s, e+1):
-                            if not i == j:
-                                type_matching.append((i, j, None))
+
+            # in-chunk edges, adjacent
+            if self.use_in_chunk:
+                for s, e in n_b:
+                    if not s == e:
+                        for i in range(s, e):
+                            type_matching.append((i, i + 1, None))
+                            type_matching.append((i + 1, i, None))
                     ngram_index.append((s, e))
 
-            for i in range(len(ngram_index) - 1):
-                s_1 = ngram_index[i]
-                s_2 = ngram_index[i+1]
-                type_matching.append((s_1[0], s_2[0], None))
-                type_matching.append((s_1[0], s_2[1], None))
-                type_matching.append((s_1[1], s_2[0], None))
-                type_matching.append((s_1[1], s_2[1], None))
+            # cross-chunk edges, adjacent
+            if self.use_cross_chunk:
+                for i in range(len(ngram_index) - 1):
+                    s_1 = ngram_index[i]
+                    s_2 = ngram_index[i+1]
+                    type_matching.append((s_1[0], s_2[0], None))
+                    type_matching.append((s_1[0], s_2[1], None))
+                    type_matching.append((s_1[1], s_2[0], None))
+                    type_matching.append((s_1[1], s_2[1], None))
 
             data.append((sentence, label, word_list, word_matching_position, tag_list, tag_matching_position,
                          type_list, type_matching))
@@ -317,8 +382,6 @@ class Supertagger(nn.Module):
 
         # -------- max ngram size --------
         max_seq_length = 0
-        max_word_size = 0
-        max_tag_size = 0
         # -------- max ngram size --------
 
         if self.bert is not None:
@@ -423,16 +486,6 @@ class Supertagger(nn.Module):
             # add self
             for i in range(len(adjacency_matrix)):
                 adjacency_matrix[i][i] = 1
-            # add link between words
-            for i in range(len(adjacency_matrix) - 1):
-                adjacency_matrix[i][i+1] = 1
-                adjacency_matrix[i+1][i] = 1
-
-            type_index = None
-            word_ids = None
-            word_matching_matrix = None
-            tag_ids = None
-            tag_matching_matrix = None
 
             features.append(
                 InputFeatures(input_ids=input_ids,
@@ -441,13 +494,31 @@ class Supertagger(nn.Module):
                               label_id=label_ids,
                               valid_ids=valid,
                               label_mask=label_mask,
-                              word_ids=word_ids,
-                              word_matching_matrix=word_matching_matrix,
-                              tag_ids=tag_ids,
-                              tag_matching_matrix=tag_matching_matrix,
-                              dep_type_ids=type_index,
                               dep_adjacency_matrix=adjacency_matrix))
         return features
+
+    def feature2input(self, device, feature):
+        all_input_ids = torch.tensor([f.input_ids for f in feature], dtype=torch.long)
+        all_input_mask = torch.tensor([f.input_mask for f in feature], dtype=torch.long)
+        all_segment_ids = torch.tensor([f.segment_ids for f in feature], dtype=torch.long)
+        all_label_ids = torch.tensor([f.label_id for f in feature], dtype=torch.long)
+        all_valid_ids = torch.tensor([f.valid_ids for f in feature], dtype=torch.long)
+        all_lmask_ids = torch.tensor([f.label_mask for f in feature], dtype=torch.long)
+        input_ids = all_input_ids.to(device)
+        input_mask = all_input_mask.to(device)
+        segment_ids = all_segment_ids.to(device)
+        label_ids = all_label_ids.to(device)
+        valid_ids = all_valid_ids.to(device)
+        l_mask = all_lmask_ids.to(device)
+
+        if self.gcn is not None:
+            all_dep_adjacency_matrix = torch.tensor([f.dep_adjacency_matrix for f in feature], dtype=torch.float)
+            dep_adjacency_matrix = all_dep_adjacency_matrix.to(device)
+        else:
+            dep_adjacency_matrix = None
+
+        return input_ids, input_mask, l_mask, label_ids, segment_ids, valid_ids, \
+               dep_adjacency_matrix
 
 
 class InputExample(object):

@@ -5,7 +5,6 @@ import json
 import logging
 import os
 import random
-import re
 
 from os import path
 
@@ -18,9 +17,9 @@ from pytorch_pretrained_bert.optimization import BertAdam, WarmupLinearSchedule
 from tqdm import tqdm, trange
 import subprocess
 
-from supertagging_helper import get_vocab, get_labels, get_relation_types
-from supertagging_eval import Evaluation, ccgparse, candc_path
-from supertagging_model import Supertagger
+from nest_ccg_helper import get_vocab, get_labels
+from nest_ccg_eval import Evaluation, ccgparse, candc_path
+from nest_ccg_model import NeSTCCG
 import datetime
 
 
@@ -80,25 +79,28 @@ def train(args):
         raise Warning('model name is not specified, the model will NOT be saved!')
     output_model_dir = os.path.join('./models', args.model_name + '_' + now_time)
 
-    ngram2id, ngram2count, tag2id, tag2count, strong_segments = get_vocab(args.train_data_path, args.dev_data_path,
-                                                                          args.max_ngram_length, args.ngram_freq_threshold)
+    ngram2id, ngram2count = get_vocab(args.train_data_path,
+                                      args.max_ngram_length, args.ngram_freq_threshold)
 
     type2id = None
 
     label_map = get_labels(args.train_data_path)
 
-    supertagger = Supertagger(labelmap=label_map, args=args, gram2id=ngram2id, tag2id=tag2id, type2id=type2id,
-                              strong_segments=strong_segments)
+    hpara = NeSTCCG.init_hyper_parameters(args)
+    supertagger = NeSTCCG(labelmap=label_map, hpara=hpara, model_path=args.bert_model,
+                          gram2id=ngram2id, type2id=type2id)
 
     train_examples = supertagger.load_data(args.train_data_path, flag='train')
     dev_examples = supertagger.load_data(args.dev_data_path, flag='dev')
+    test_examples = supertagger.load_data(args.test_data_path, flag='test')
 
-    all_eval_examples = {'dev': dev_examples}
+    all_eval_examples = {'dev': dev_examples, 'test': test_examples}
     num_labels = supertagger.num_labels
     convert_examples_to_features = supertagger.convert_examples_to_features
     clipping_top_n = supertagger.clipping_top_n
     clipping_threshold = supertagger.clipping_threshold
     id2label = supertagger.id2label
+    feature2input = supertagger.feature2input
 
     total_params = sum(p.numel() for p in supertagger.parameters() if p.requires_grad)
     logger.info('# of trainable parameters: %d' % total_params)
@@ -157,7 +159,8 @@ def train(args):
     global_step = 0
     best_eval = -1
     best_info_str = ''
-    history = {'epoch': [], 'dev_acc': [], 'dev_cats': [], 'dev_lf': [], 'dev_uf': []}
+    history = {'epoch': [], 'dev_acc': [], 'dev_cats': [], 'dev_lf': [], 'dev_uf': [],
+               'test_acc': [], 'test_cats': [], 'test_lf': [], 'test_uf': []}
     num_of_no_improvement = 0
     patient = args.patient
 
@@ -179,14 +182,12 @@ def train(args):
                 batch_examples = train_examples[start_index: min(start_index +
                                                                  args.train_batch_size, len(train_examples))]
                 train_features = convert_examples_to_features(batch_examples)
-                input_ids, input_mask, l_mask, label_ids, segment_ids, valid_ids, \
-                word_ids, word_mask, tag_ids, tag_mask, \
-                dep_ids, dep_adjacency_matrix = feature2input(args, device, train_features)
 
-                loss, _ = supertagger(input_ids, segment_ids, input_mask, label_ids, valid_ids, l_mask, word_ids,
-                                      word_mask, tag_ids, tag_mask,
-                                      adjacency_matrix=dep_adjacency_matrix,
-                                      type_seq=dep_ids, type_matrix=None)
+                input_ids, input_mask, l_mask, label_ids, segment_ids, valid_ids, \
+                dep_adjacency_matrix = feature2input(device, train_features)
+
+                loss, _ = supertagger(input_ids, segment_ids, input_mask, label_ids, valid_ids, l_mask,
+                                      adjacency_matrix=dep_adjacency_matrix)
                 if n_gpu > 1:
                     loss = loss.mean()  # mean() to average on multi-gpu.
                 if args.gradient_accumulation_steps > 1:
@@ -222,7 +223,7 @@ def train(args):
                     os.mkdir(output_model_dir)
 
                 history['epoch'].append(epoch)
-                for flag in ['dev']:
+                for flag in ['dev', 'test']:
                     eval_examples = all_eval_examples[flag]
                     all_y_true = []
                     all_y_pred = []
@@ -233,14 +234,11 @@ def train(args):
                         eval_features = convert_examples_to_features(eval_batch_examples)
 
                         input_ids, input_mask, l_mask, label_ids, segment_ids, valid_ids, \
-                        word_ids, word_mask, tag_ids, tag_mask, \
-                        dep_ids, dep_adjacency_matrix = feature2input(args, device, eval_features)
+                        dep_adjacency_matrix = feature2input(device, eval_features)
 
                         with torch.no_grad():
                             _, logits = supertagger(input_ids, segment_ids, input_mask, label_ids, valid_ids, l_mask,
-                                                    word_ids, word_mask, tag_ids, tag_mask,
-                                                    adjacency_matrix=dep_adjacency_matrix,
-                                                    type_seq=dep_ids, type_matrix=None
+                                                    adjacency_matrix=dep_adjacency_matrix
                                                     )
 
                         logits = F.softmax(logits, dim=2)
@@ -351,25 +349,17 @@ def train(args):
                 info_str = ' '.join(log_info)
                 logger.info(info_str)
 
+                keep
                 if history['dev_acc'][-1] > best_eval:
                     best_eval = history['dev_acc'][-1]
                     best_info_str = info_str
                     num_of_no_improvement = 0
 
-                    best_eval_model_path = os.path.join(output_model_dir, 'model.pt')
-
-                    if n_gpu > 1:
-                        torch.save({
-                            'spec': supertagger.module.spec,
-                            'state_dict': supertagger.module.state_dict(),
-                            'trainer': optimizer.state_dict(),
-                        }, best_eval_model_path)
-                    else:
-                        torch.save({
-                            'spec': supertagger.spec,
-                            'state_dict': supertagger.state_dict(),
-                            'trainer': optimizer.state_dict(),
-                        }, best_eval_model_path)
+                    model_to_save = supertagger.module if hasattr(supertagger, 'module') else supertagger
+                    best_eval_model_dir = os.path.join(output_model_dir, 'model')
+                    if not os.path.exists(best_eval_model_dir):
+                        os.mkdir(best_eval_model_dir)
+                    model_to_save.save_model(best_eval_model_dir, args.bert_model)
                 else:
                     num_of_no_improvement += 1
 
@@ -384,33 +374,6 @@ def train(args):
         with open(os.path.join(output_model_dir, 'history.json'), 'w', encoding='utf8') as f:
             json.dump(history, f)
             f.write('\n')
-
-
-def feature2input(args, device, feature):
-    all_input_ids = torch.tensor([f.input_ids for f in feature], dtype=torch.long)
-    all_input_mask = torch.tensor([f.input_mask for f in feature], dtype=torch.long)
-    all_segment_ids = torch.tensor([f.segment_ids for f in feature], dtype=torch.long)
-    all_label_ids = torch.tensor([f.label_id for f in feature], dtype=torch.long)
-    all_valid_ids = torch.tensor([f.valid_ids for f in feature], dtype=torch.long)
-    all_lmask_ids = torch.tensor([f.label_mask for f in feature], dtype=torch.long)
-    input_ids = all_input_ids.to(device)
-    input_mask = all_input_mask.to(device)
-    segment_ids = all_segment_ids.to(device)
-    label_ids = all_label_ids.to(device)
-    valid_ids = all_valid_ids.to(device)
-    l_mask = all_lmask_ids.to(device)
-
-    word_ids = None
-    word_matching_matrix = None
-    tag_ids = None
-    tag_matching_matrix = None
-
-    all_dep_adjacency_matrix = torch.tensor([f.dep_adjacency_matrix for f in feature], dtype=torch.float)
-    dep_adjacency_matrix = all_dep_adjacency_matrix.to(device)
-    dep_type = None
-
-    return input_ids, input_mask, l_mask, label_ids, segment_ids, valid_ids, \
-           word_ids, word_matching_matrix, tag_ids, tag_matching_matrix, dep_type, dep_adjacency_matrix
 
 
 def test(args):
@@ -429,20 +392,19 @@ def test(args):
     print("device: {} n_gpu: {}, distributed training: {}, 16-bits training: {}".format(
         device, n_gpu, bool(args.local_rank != -1), args.fp16))
 
-    supertag_model_checkpoint = torch.load(args.eval_model)
-    supertag_model = Supertagger.from_spec(supertag_model_checkpoint['spec'], supertag_model_checkpoint['state_dict'])
+    supertagger = NeSTCCG.load_model(args.eval_model)
 
-    eval_examples = supertag_model.load_data(args.eval_data_path, flag='test')
-    num_labels = supertag_model.num_labels
-    convert_examples_to_features = supertag_model.convert_examples_to_features
-    model_arg = supertag_model.spec['args']
-    clipping_threshold = supertag_model.clipping_threshold
-    clipping_top_n = supertag_model.clipping_top_n
-    id2label = supertag_model.id2label
+    eval_examples = supertagger.load_data(args.eval_data_path, flag='test')
+    num_labels = supertagger.num_labels
+    convert_examples_to_features = supertagger.convert_examples_to_features
+    clipping_threshold = supertagger.clipping_threshold
+    clipping_top_n = supertagger.clipping_top_n
+    id2label = supertagger.id2label
+    feature2input = supertagger.feature2input
 
     if args.fp16:
-        supertag_model.half()
-    supertag_model.to(device)
+        supertagger.half()
+    supertagger.to(device)
     if args.local_rank != -1:
         try:
             from apex.parallel import DistributedDataParallel as DDP
@@ -450,15 +412,13 @@ def test(args):
             raise ImportError(
                 "Please install apex from https://www.github.com/nvidia/apex to use distributed and fp16 training.")
 
-        supertag_model = DDP(supertag_model)
+        supertagger = DDP(supertagger)
     elif n_gpu > 1:
-        supertag_model = torch.nn.DataParallel(supertag_model)
+        supertagger = torch.nn.DataParallel(supertagger)
 
-    supertag_model.to(device)
+    supertagger.to(device)
 
-    supertag_model.eval()
-
-    results = {'test_acc': 0, 'test_cats': 0, 'test_lf': 0, 'test_uf': 0}
+    supertagger.eval()
 
     all_y_true = []
     all_y_pred = []
@@ -470,15 +430,12 @@ def test(args):
         eval_features = convert_examples_to_features(eval_batch_examples)
 
         input_ids, input_mask, l_mask, label_ids, segment_ids, valid_ids, \
-        word_ids, word_mask, tag_ids, tag_mask, \
-        dep_ids, dep_adjacency_matrix = feature2input(model_arg, device, eval_features)
+        dep_adjacency_matrix = feature2input(device, eval_features)
 
         with torch.no_grad():
-            _, logits = supertag_model(input_ids, segment_ids, input_mask, label_ids, valid_ids, l_mask,
-                                       word_ids, word_mask, tag_ids, tag_mask,
-                                       adjacency_matrix=dep_adjacency_matrix,
-                                       type_seq=dep_ids, type_matrix=None
-                                       )
+            _, logits = supertagger(input_ids, segment_ids, input_mask, label_ids, valid_ids, l_mask,
+                                    adjacency_matrix=dep_adjacency_matrix
+                                    )
 
         logits = F.softmax(logits, dim=2)
         argmax_logits = torch.argmax(logits, dim=2)
@@ -538,6 +495,9 @@ def test(args):
         y_true_all += y_true_item
     for y_pred_item in all_y_pred:
         y_pred_all += y_pred_item
+
+    acc = evaluator.supertag_acc(y_pred_all, y_true_all)
+
     for example, y_true_item in zip(eval_examples, all_y_true):
         sen = example.text_a
         sen = sen.strip()
@@ -546,12 +506,25 @@ def test(args):
             # print(len(sen))
             sen = sen[:len(y_true_item)]
         eval_sentence_all.append(sen)
-    acc = evaluator.supertag_acc(y_pred_all, y_true_all)
-
-    results['test_acc'] = acc
 
     if not os.path.exists('./tmp'):
         os.mkdir('./tmp')
+
+    correct_results_file = os.path.join('./tmp', 'test.correct.result.txt')
+
+    with open(correct_results_file, 'w', encoding='utf8') as f:
+        for index, (sen, y_true, y_pred) in enumerate(zip(eval_sentence_all, all_y_true, all_y_pred)):
+            correct = True
+            for y_t, y_p in zip(y_true, y_pred):
+                if not y_t == y_p:
+                    correct = False
+                    break
+            if correct and len(sen) < 20:
+                f.write('ID=%d\n' % (index + 1))
+                f.write(' '.join(sen) + '\n')
+                for w, y_t in zip(sen, y_true):
+                    f.write('%s\t%s\n' % (w, y_t))
+                f.write('\n')
 
     auto_output_file = os.path.join('./tmp', 'test.auto')
 
@@ -562,18 +535,25 @@ def test(args):
             f.write(line + '\n')
 
     command = 'java -jar ' + ccgparse + ' -f ' + supertag_output_file + ' -o ' + auto_output_file + ' >' + auto_output_file
+    print(command)
     subprocess.run(command, shell=True)
 
     dep_output_file = os.path.join('./tmp', 'test.dep')
 
     command = './auto2dep.sh ' + candc_path + ' ' + auto_output_file + ' ' + dep_output_file
+    print(command)
     subprocess.run(command, shell=True)
 
     eval_output_file = os.path.join('./tmp', 'test.eval')
-    tag_gold = os.path.join(args.eval_data_dir, 'gold_files', 'test.stagged')
-    dep_gold = os.path.join(args.eval_data_dir, 'gold_files', 'test.dep.gold')
+    if args.eval_data_path.find('dev') > -1:
+        tag_gold = os.path.join(args.eval_data_dir, 'gold_files', 'dev.stagged')
+        dep_gold = os.path.join(args.eval_data_dir, 'gold_files', 'dev.dep.gold')
+    else:
+        tag_gold = os.path.join(args.eval_data_dir, 'gold_files', 'test.stagged')
+        dep_gold = os.path.join(args.eval_data_dir, 'gold_files', 'test.dep.gold')
     command = 'python ccg_eval.py -r ' + tag_gold + ' ' + dep_gold + ' ' \
               + dep_output_file + ' ' + auto_output_file + ' >' + eval_output_file
+    print(command)
     subprocess.run(command, shell=True)
 
     results = evaluator.eval_file_reader(eval_output_file)
@@ -582,6 +562,8 @@ def test(args):
         h_key = 'test_' + key
         if h_key in results:
             results[h_key] = value
+
+    results['acc'] = acc
 
     log_info = []
     for key, value in results.items():
@@ -654,12 +636,6 @@ def main():
                         help="The maximum total input sequence length after WordPiece tokenization. \n"
                              "Sequences longer than this will be truncated, and sequences shorter \n"
                              "than this will be padded.")
-    parser.add_argument("--max_ngram_size",
-                        default=128,
-                        type=int,
-                        help="The maximum candidate word size used by attention. \n"
-                             "Sequences longer than this will be truncated, and sequences shorter \n"
-                             "than this will be padded.")
     parser.add_argument("--do_lower_case",
                         action='store_true',
                         help="Set this flag if you are using an uncased model.")
@@ -713,12 +689,11 @@ def main():
     parser.add_argument('--ngram_freq_threshold', type=int, default=0, help="The threshold of n-gram frequency")
     parser.add_argument('--max_ngram_length', type=int, default=5,
                         help="The maximum length of n-grams to be considered.")
-    parser.add_argument('--window_size', type=int, default=3,
-                        help="The maximum length of n-grams to be considered.")
     parser.add_argument('--model_name', type=str, default=None, help="")
-    parser.add_argument("--use_weight",
-                        action='store_true',
-                        help="Whether to run training.")
+    parser.add_argument("--use_weight", action='store_true', help="")
+    parser.add_argument("--use_gcn", action='store_true', help="")
+    parser.add_argument("--use_in_chunk", action='store_true', help="")
+    parser.add_argument("--use_cross_chunk", action='store_true', help="")
     parser.add_argument('--gcn_layer_number', type=int, default=2,
                         help="The maximum length of n-grams to be considered.")
     parser.add_argument('--clipping_top_n', type=int, default=5, help="Can be used for distant debugging.")

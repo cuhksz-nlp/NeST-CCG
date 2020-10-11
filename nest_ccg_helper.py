@@ -1,6 +1,7 @@
 from collections import defaultdict
 import re
 import math
+import json
 
 class FindNgrams:
     def __init__(self, min_count=0, min_pmi=0, min_freq=0):
@@ -108,10 +109,9 @@ def read_tsv(filename):
     return data
 
 
-def get_vocab(train_path, dev_path, max_ngram_length=5, ngram_freq_threshold=2, keep_stop_words=False):
+def get_vocab(train_path, max_ngram_length=5, ngram_freq_threshold=2, keep_stop_words=False):
     ngram2id = {'<PAD>': 0}
     lines = read_tsv(train_path)
-    # lines += read_tsv(dev_path)
     all_sentences = [sentence[0] for sentence in lines]
 
     ngram_finder = FindNgrams(min_count=ngram_freq_threshold, min_freq=ngram_freq_threshold)
@@ -137,26 +137,7 @@ def get_vocab(train_path, dev_path, max_ngram_length=5, ngram_freq_threshold=2, 
             ngram2id[w] = index
             index += 1
 
-    tag2id = {'<PAD>': 0}
-    tag2count = defaultdict(int)
-
-    all_sentence_tags = [(sentence[0], sentence[1]) for sentence in lines]
-    for sent, tag_list in all_sentence_tags:
-        for i in range(len(sent)):
-            for n in range(1, max_ngram_length+1):
-                if i + n > len(sent):
-                    break
-                ngram = tuple(sent[i: i+n])
-                tag_ngram = tuple(tag_list[i: i+n])
-                if ngram in ngram2id:
-                    tag2count[tag_ngram] += 1
-    index = 1
-    for tag, count in tag2count.items():
-        if count > ngram_freq_threshold:
-            tag2id[tag] = index
-            index += 1
-
-    return ngram2id, ngram_count, tag2id, tag2count, ngram_finder.strong_segments
+    return ngram2id, ngram_count
 
 
 def get_labels(train_path):
@@ -201,3 +182,15 @@ def get_relation_types(train_path):
     type2id['[SEP]'] = index + 1
     assert len(type2id) == index + 2
     return type2id
+
+
+def load_json(file_path):
+    with open(file_path, 'r', encoding='utf8') as f:
+        line = f.readline()
+    return json.loads(line)
+
+
+def save_json(file_path, data):
+    with open(file_path, 'w', encoding='utf8') as f:
+        json.dump(data, f)
+        f.write('\n')
