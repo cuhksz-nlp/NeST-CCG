@@ -1,21 +1,31 @@
 # NeST-CCG
 
-Submission to EMNLP 2020
+This is the implementation of [Supertagging Combinatory Categorial Grammar with Attentive Graph Convolutional Networks](https://www.aclweb.org/anthology/) at EMNLP2020.
 
-GCN CCG supertagger
+You can e-mail Yuanhe Tian at `yhtian@uw.edu` or Guimin Chen at `chenguimin@chuangxin.com`, if you have any questions.
 
 ## Prerequisites
-* python 3.6
-* pytorch 1.1
 
-    
+Our code works with the following environment.
+* `python=3.7`
+* `pytorch=1.3`
+
+
 Install python dependencies by running:
 
 `
 pip install -r requirements.txt
 `
 
-Models are trained on NVIDIA Tesla P100 GPU with 16G RAM
+## Downloading BERT and Our Pre-trained Models
+
+In our paper, we use BERT ([paper](https://www.aclweb.org/anthology/N19-1423/)) as the encoder.
+
+For BERT, please download pre-trained BERT-Base Chinese from [Google](https://github.com/google-research/bert) or from [HuggingFace](https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-chinese.tar.gz). If you download it from Google, you need to convert the model from TensorFlow version to PyTorch version.
+
+For our pre-trained model, we will release it soon.
+
+## Run on Sample Data
 
 To train a model on a small dataset, run:
 
@@ -23,10 +33,44 @@ To train a model on a small dataset, run:
 ./run.sh
 `
 
-The hyper-parameters for the best performing models are reported in the "./run.sh" file.
+## Datasets
 
-You do not need any extra steps if you only want to run and evaluate the supertagging part of our model.
+We use [CCGbank](https://catalog.ldc.upenn.edu/LDC2005T13) in our paper.
 
-If you want to evaluate the parsing part of our model, you need java1.8 to run "tag2auto.jar".
+We will release the code to pre-process the data soon.
 
-You also need to setup the C&C parser follow the instruction here: https://aclweb.org/aclwiki/Training_the_C%26C_Parser
+
+## Training and Testing
+
+You can find the command lines to train and test models on a specific dataset in `run.sh`.
+
+Here are some important parameters:
+
+* `--do_train`: train the model.
+* `--do_test`: test the model.
+* `--use_bert`: use BERT as encoder.
+* `--use_gcn`: whether to use GCN.
+* `--use_weight`: whether to use A-GCN.
+* `--use_in_chunk`: whether to in-chunk edges to build the graph.
+* `--use_cross_chunk`: whether to cross-chunk edges to build the graph.
+* `--gcn_layer_number`: the number of GCN layers.
+* `--bert_model`: the directory of pre-trained BERT model.
+* `--max_ngram_length`: the max length of n-grams.
+* `--ngram_freq_threshold`: n-grams whose frequency is lower than the threshold will be excluded from the lexicon N.
+* `--model_name`: the name of model to save.
+
+## Predicting
+
+In processing.
+
+
+## To-do List
+
+* Release the code to pre-process the data.
+* Release the pre-trained model for CCG supertagging.
+* Implement the `predict` function of our model.
+* Regular maintenance.
+
+You can leave comments in the `Issues` section, if you want us to implement any functions.
+
+You can check our updates at [updates.md](./updates.md).

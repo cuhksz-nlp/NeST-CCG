@@ -300,7 +300,7 @@ class NeSTCCG(nn.Module):
 
         data = []
 
-        for sentence, label, pos_tags, governor_index, relation_type in lines:
+        for sentence, label in lines:
 
             if len(sentence) > self.max_seq_length:
                 continue

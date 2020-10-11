@@ -97,7 +97,7 @@ def read_tsv(filename):
             line = line.strip()
             if line == '':
                 if len(sentence) > 0:
-                    data.append((sentence, label, None, None, None))
+                    data.append((sentence, label))
                 sentence = []
                 label = []
                 continue
@@ -105,7 +105,7 @@ def read_tsv(filename):
             sentence.append(splits[0])
             label.append(splits[3])
     if len(sentence) > 0:
-        data.append((sentence, label, None, None, None))
+        data.append((sentence, label))
     return data
 
 
@@ -155,33 +155,6 @@ def get_labels(train_path):
     label2id['[SEP]'] = index + 1
     assert len(label2id) == index + 2
     return label2id
-
-
-def get_relation_types(train_path):
-    lines = read_tsv(train_path)
-
-    all_types = [(sentence[0], sentence[4]) for sentence in lines]
-    type2count = defaultdict(int)
-
-    for word_list, type_list in all_types:
-        for word, dep_type in zip(word_list, type_list):
-            joint_type = word.lower() + '_' + dep_type
-            # type2count[joint_type] += 1
-            type2count[dep_type] += 1
-
-    type2id = {'<PAD>': 0, '<UNK>': 1}
-    index = 2
-
-    for t, c in type2count.items():
-        if c >= 20:
-            assert t not in type2id
-            type2id[t] = index
-            index += 1
-
-    type2id['[CLS]'] = index
-    type2id['[SEP]'] = index + 1
-    assert len(type2id) == index + 2
-    return type2id
 
 
 def load_json(file_path):

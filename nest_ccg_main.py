@@ -82,13 +82,11 @@ def train(args):
     ngram2id, ngram2count = get_vocab(args.train_data_path,
                                       args.max_ngram_length, args.ngram_freq_threshold)
 
-    type2id = None
-
     label_map = get_labels(args.train_data_path)
 
     hpara = NeSTCCG.init_hyper_parameters(args)
     supertagger = NeSTCCG(labelmap=label_map, hpara=hpara, model_path=args.bert_model,
-                          gram2id=ngram2id, type2id=type2id)
+                          gram2id=ngram2id)
 
     train_examples = supertagger.load_data(args.train_data_path, flag='train')
     dev_examples = supertagger.load_data(args.dev_data_path, flag='dev')
