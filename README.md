@@ -1,4 +1,4 @@
-# GCNST
+# NeST-CCG
 
 Submission to EMNLP 2020
 
