@@ -347,7 +347,6 @@ def train(args):
                 info_str = ' '.join(log_info)
                 logger.info(info_str)
 
-                keep
                 if history['dev_acc'][-1] > best_eval:
                     best_eval = history['dev_acc'][-1]
                     best_info_str = info_str
