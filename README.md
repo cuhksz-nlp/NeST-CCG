@@ -17,7 +17,7 @@ Install python dependencies by running:
 pip install -r requirements.txt
 `
 
-To generate and evaluate the CCG parsing results from the predicted supertags, you need to unzip `candc.zip` and put the obtainedd `candc` folder under the home directory. To do this, just run `unzip candc.zip`.
+To generate and evaluate the CCG parsing results from the predicted supertags, you need to unzip `candc.zip` and put the obtained `candc` folder under the home directory. You also need to [setup](https://aclweb.org/aclwiki/Training_the_C%26C_Parser) the C&C parser. To do this, just run `./setup_condc.sh`.
 
 ## Downloading BERT and Our Pre-trained Models
 
