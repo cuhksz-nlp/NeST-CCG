@@ -579,10 +579,10 @@ def main():
                         help="Whether to run training.")
     parser.add_argument("--do_test",
                         action='store_true',
-                        help="Whether to run training.")
+                        help="Whether to run testing.")
     parser.add_argument("--do_predict",
                         action='store_true',
-                        help="Whether to run training.")
+                        help="Whether to run predicting.")
     parser.add_argument("--train_data_path",
                         default=None,
                         type=str,

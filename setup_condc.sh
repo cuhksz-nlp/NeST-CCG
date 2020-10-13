@@ -7,4 +7,4 @@ make -f Makefile.unix
 
 make -f Makefile.unix all train bin/generate
 
-./candc/bin/generate
+./bin/generate

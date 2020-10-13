@@ -17,14 +17,16 @@ Install python dependencies by running:
 pip install -r requirements.txt
 `
 
+You also need `Java 1.8` to run `tag2auto.jar`, which generate the CCG parsing results from the predicted supertags. You can skip this step if you only want to get the supertagging results.
+
 ## Evaluation
 
-To generate and evaluate the CCG parsing results from the predicted supertags, you need to unzip `candc.zip` and put the obtained `candc` folder under the home directory. You also need to [setup](https://aclweb.org/aclwiki/Training_the_C%26C_Parser) the C&C parser. To do this, just run `./setup_condc.sh`.
+To evaluate the CCG parsing results generated from the predicted supertags, you need to [setup C&C parser](https://aclweb.org/aclwiki/Training_the_C%26C_Parser). To do this, just run `./setup_condc.sh`.
 
 To test whether C&C parser is successfully installed for the purpose of evaluation, run `./candc/bin/generate`. If you see the following, then it means C&C parser is successfully installed.
 
 ```angular2
-./candc/bin/generate
+$ ./candc/bin/generate
 expected a flag indicating output type
 usage: generate -t <cats_directory> <markedup_file> <pipe_file> > <deps> 2> <feats>
        generate -e <cats_directory> <markedup_file> <pipe_file> > <word_deps>
@@ -39,26 +41,25 @@ In our paper, we use [BERT](https://www.aclweb.org/anthology/N19-1423/) as the e
 
 For BERT, please download pre-trained BERT model from [Google](https://github.com/google-research/bert) and convert the model from the TensorFlow version to PyTorch version.
 
-For our pre-trained model, we will release it soon.
+For our pre-trained model, we you can download it from [Baidu Wangpan](https://pan.baidu.com/s/1YVvUvRPU-wgquwydlhAK0A) (passcode: u4ta) or from Google Drive (coming soon).
 
 ## Run on Sample Data
 
-To train a model on a small dataset, run:
+To train a model on [a small dataset](./sample_data), see the command lines in `run.sh`.
 
-`
-./run.sh
-`
 
 ## Datasets
 
-We use [CCGbank](https://catalog.ldc.upenn.edu/LDC2005T13) in our paper.
+We use [CCGbank](https://catalog.ldc.upenn.edu/LDC2005T13) in our paper. 
 
-We will release the code to pre-process the data soon.
+To preprocess the data, please go to `data_processing` directory and run `./data_processing`. You can find more details [here](./data_processing/README.md). You need to obtain the official CCGbank yourself before running our code.
+
+If everything goes smoothly, you will see all data files in the `./data` directory with all filenames identical with the ones in `./sample_data`.
 
 
 ## Training and Testing
 
-You can find the command lines to train and test models on a specific dataset in `run.sh`.
+You can find the command lines to train and test models on the sample data in `run.sh`.
 
 Here are some important parameters:
 
@@ -82,8 +83,7 @@ In processing.
 
 ## To-do List
 
-* Release the code to pre-process the data.
-* Release the pre-trained model for CCG supertagging.
+* Release the pre-trained model for CCG supertagging (on Google Drive).
 * Implement the `predict` function of our model.
 * Regular maintenance.
 
