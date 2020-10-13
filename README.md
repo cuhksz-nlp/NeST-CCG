@@ -2,7 +2,7 @@
 
 This is the implementation of [Supertagging Combinatory Categorial Grammar with Attentive Graph Convolutional Networks](https://www.aclweb.org/anthology/) at EMNLP2020.
 
-You can e-mail Yuanhe Tian at `yhtian@uw.edu` or Guimin Chen at `chenguimin@chuangxin.com`, if you have any questions.
+You can e-mail Yuanhe Tian at `yhtian@uw.edu` or Guimin Chen at `cuhksz.nlp@gmail.com`, if you have any questions.
 
 ## Prerequisites
 
@@ -17,7 +17,7 @@ Install python dependencies by running:
 pip install -r requirements.txt
 `
 
-You also need `Java 1.8` to run `tag2auto.jar`, which generate the CCG parsing results from the predicted supertags. You can skip this step if you only want to get the supertagging results.
+You also need `Java 1.8` to run `tag2auto.jar`, which wiil generate the CCG parsing results from the predicted supertags. You can skip this step if you only want to get the supertagging results.
 
 ## Evaluation
 
