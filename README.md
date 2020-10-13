@@ -2,7 +2,7 @@
 
 This is the implementation of [Supertagging Combinatory Categorial Grammar with Attentive Graph Convolutional Networks](https://www.aclweb.org/anthology/) at EMNLP2020.
 
-You can e-mail Yuanhe Tian at `yhtian@uw.edu` or Guimin Chen at `cuhksz.nlp@gmail.com`, if you have any questions.
+Please contact us at `yhtian@uw.edu` or `cuhksz.nlp@gmail.com` if you have any questions.
 
 
 ## Citation
