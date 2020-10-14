@@ -1,6 +1,6 @@
 # NeST-CCG
 
-This is the implementation of [Supertagging Combinatory Categorial Grammar with Attentive Graph Convolutional Networks](https://www.aclweb.org/anthology/) at EMNLP2020.
+This is the implementation of [Supertagging Combinatory Categorial Grammar with Attentive Graph Convolutional Networks](https://arxiv.org/abs/2010.06115) at EMNLP2020.
 
 Please contact us at `yhtian@uw.edu` or `cuhksz.nlp@gmail.com` if you have any questions.
 
