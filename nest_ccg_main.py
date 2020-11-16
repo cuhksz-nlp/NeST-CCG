@@ -348,26 +348,13 @@ def train(args):
                 info_str = ' '.join(log_info)
                 logger.info(info_str)
 
-                # if history['dev_acc'][-1] > best_eval:
-                #     best_eval = history['dev_acc'][-1]
-                #     best_info_str = info_str
-                #     num_of_no_improvement = 0
-                #
-                #     model_to_save = supertagger.module if hasattr(supertagger, 'module') else supertagger
-                #     best_eval_model_dir = os.path.join(output_model_dir, 'model')
-                #     if not os.path.exists(best_eval_model_dir):
-                #         os.mkdir(best_eval_model_dir)
-                #     model_to_save.save_model(best_eval_model_dir, args.bert_model)
-
-                # delete
-                if history['test_lf'][-1] > args.target:
+                if history['dev_acc'][-1] > best_eval:
+                    best_eval = history['dev_acc'][-1]
                     best_info_str = info_str
                     num_of_no_improvement = 0
 
                     model_to_save = supertagger.module if hasattr(supertagger, 'module') else supertagger
-                    best_eval_model_dir = os.path.join(output_model_dir, 'model_%.2f_%.2f_%.2f_%.2f' %
-                                                       (history['dev_acc'][-1], history['dev_lf'][-1],
-                                                        history['test_acc'][-1], history['test_lf'][-1]))
+                    best_eval_model_dir = os.path.join(output_model_dir, 'model')
                     if not os.path.exists(best_eval_model_dir):
                         os.mkdir(best_eval_model_dir)
                     model_to_save.save_model(best_eval_model_dir, args.bert_model)
@@ -708,8 +695,6 @@ def main():
                         help="The maximum length of n-grams to be considered.")
     parser.add_argument('--clipping_top_n', type=int, default=5, help="Can be used for distant debugging.")
     parser.add_argument('--clipping_threshold', type=float, default=0.0005, help="Can be used for distant debugging.")
-
-    parser.add_argument('--target', type=float, default=0)
 
     args = parser.parse_args()
 
