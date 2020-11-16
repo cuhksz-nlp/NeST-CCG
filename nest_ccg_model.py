@@ -216,11 +216,13 @@ class NeSTCCG(nn.Module):
             sequence_output = self.gcn(sequence_output, adjacency_matrix)
 
         logits = self.classifier(sequence_output)
-        total_loss = self.loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
-        assert not torch.isnan(total_loss)
-
-        return total_loss, logits
+        if labels is None:
+            return logits
+        else:
+            total_loss = self.loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            assert not torch.isnan(total_loss)
+            return total_loss
 
     @staticmethod
     def init_hyper_parameters(args):
@@ -446,7 +448,7 @@ class NeSTCCG(nn.Module):
                     if labels[i] in self.labelmap:
                         label_ids.append(self.labelmap[labels[i]])
                     else:
-                        label_ids.append(self.labelmap['<UNK>'])
+                        label_ids.append(0)
             ntokens.append("[SEP]")
 
             segment_ids.append(0)

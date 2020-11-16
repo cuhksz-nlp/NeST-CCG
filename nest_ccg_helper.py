@@ -140,17 +140,32 @@ def get_vocab(train_path, max_ngram_length=5, ngram_freq_threshold=2, keep_stop_
     return ngram2id, ngram_count
 
 
-def get_labels(train_path):
-    lines = read_tsv(train_path)
+# def get_labels(train_path):
+#     lines = read_tsv(train_path)
+#
+#     all_labels = [sentence[1] for sentence in lines]
+#     label2id = {'<PAD>': 0, '<UNK>': 1}
+#     index = 2
+#     for label_list in all_labels:
+#         for label in label_list:
+#             if label not in label2id:
+#                 label2id[label] = index
+#                 index += 1
+#     label2id['[CLS]'] = index
+#     label2id['[SEP]'] = index + 1
+#     assert len(label2id) == index + 2
+#     return label2id
 
-    all_labels = [sentence[1] for sentence in lines]
+def get_labels(tag_path):
+    with open(tag_path, 'r', encoding='utf8') as f:
+        lines = f.readlines()
+
     label2id = {'<PAD>': 0, '<UNK>': 1}
     index = 2
-    for label_list in all_labels:
-        for label in label_list:
-            if label not in label2id:
-                label2id[label] = index
-                index += 1
+    for line in lines:
+        label = line.strip()
+        label2id[label] = index
+        index += 1
     label2id['[CLS]'] = index
     label2id['[SEP]'] = index + 1
     assert len(label2id) == index + 2

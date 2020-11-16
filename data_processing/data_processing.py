@@ -3,7 +3,6 @@ from os import path
 import re
 import argparse
 from collections import defaultdict
-from tqdm import tqdm
 
 OUTPUT_HOME = '../data'
 
@@ -130,12 +129,50 @@ class CCGSupertagging:
                                     fw.write(out_line)
                                     fw.write('\n')
 
+    def get_tagset(self):
+        ccg2count = defaultdict(int)
+        flag = 'train'
+        sent_num = 0
+        max_sent_len = -1
+        token2count = defaultdict(int)
+        input_file = path.join(self.processed_dir, flag + '.tsv')
+        with open(input_file, 'r', encoding='utf8') as f:
+            lines = f.readlines()
+            sent_len = 0
+            for line in lines:
+                line = line.strip()
+                if line == '':
+                    sent_num += 1
+                    if sent_len > max_sent_len:
+                        max_sent_len = sent_len
+                    sent_len = 0
+                    continue
+                splits = line.split()
+                token = splits[0]
+                ccg = splits[3]
+                token2count[token] += 1
+                ccg2count[ccg] += 1
+                sent_len += 1
+        # print('sentences in %s: %d' % (flag, sent_num))
+        # print('word types in %s: %d' % (flag, len(token2count)))
+        # print('words in %s: %d' % (flag, sum(token2count.values())))
+        # print('max sentence length: %d' % max_sent_len)
+        sorted_ccg2count = sorted(ccg2count.items(), key=lambda kv: (kv[1], kv[0]), reverse=True)
+        eval_ccg = [ccg2count[0] for ccg2count in sorted_ccg2count if ccg2count[1] >= 10]
+        print(len(eval_ccg))
+        assert len(eval_ccg) == 425
+        eval_label2id_file = path.join(self.processed_dir, '425tags')
+        with open(eval_label2id_file, 'w', encoding='utf8') as f:
+            for ccg in eval_ccg:
+                f.write(ccg + '\n')
+
 
 def main(args):
     ccg_supertagger = CCGSupertagging(args.ccgbank_home)
     if args.supertag:
         print('Generating files for CCG supertagging...')
         ccg_supertagger.process_supertag()
+        ccg_supertagger.get_tagset()
     if args.ccg_parsing:
         print('Generating files for CCG parsing...')
         ccg_supertagger.prepare_auto_gold()

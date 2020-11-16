@@ -2,7 +2,7 @@
 
 python data_processing.py --ccgbank_home=./LDC05T13 --supertag --ccg_parsing
 
-cp ../sample_data/eval_label2id ../data/
+cp ../sample_data/425tags ../data/
 
 # You need to make sure ./candc/bin/generate can run appropriately before you run the following code
 # The following code is used to generate the files to evaluate the CCG parsing results.

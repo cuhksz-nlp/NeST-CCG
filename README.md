@@ -1,6 +1,6 @@
 # NeST-CCG
 
-This is the implementation of [Supertagging Combinatory Categorial Grammar with Attentive Graph Convolutional Networks](https://arxiv.org/abs/2010.06115) at EMNLP2020.
+This is the implementation of [Supertagging Combinatory Categorial Grammar with Attentive Graph Convolutional Networks](https://www.aclweb.org/anthology/2020.emnlp-main.487/) at EMNLP2020.
 
 Please contact us at `yhtian@uw.edu` or `cuhksz.nlp@gmail.com` if you have any questions.
 
@@ -13,9 +13,11 @@ If you use or extend our work, please cite our paper at EMNLP-2020.
 @inproceedings{tian-etal-2020-supertagging,
     title = "Supertagging Combinatory Categorial Grammar with Attentive Graph Convolutional Networks",
     author = "Tian, Yuanhe and Song, Yan and Xia, Fei",
-    booktitle = "Proceedings of the 2020 Conference on Empirical Methods in Natural Language Processing",
+    booktitle = "Proceedings of the 2020 Conference on Empirical Methods in Natural Language Processing (EMNLP)",
     month = nov,
     year = "2020",
+    address = "Online",
+    pages = "6037--6044",
 }
 ```
 
@@ -56,7 +58,7 @@ In our paper, we use [BERT](https://www.aclweb.org/anthology/N19-1423/) as the e
 
 For BERT, please download pre-trained BERT model from [Google](https://github.com/google-research/bert) and convert the model from the TensorFlow version to PyTorch version.
 
-For our pre-trained model, we you can download it from [Baidu Wangpan](https://pan.baidu.com/s/1YVvUvRPU-wgquwydlhAK0A) (passcode: u4ta) or from Google Drive (coming soon).
+For our pre-trained models, we will upload them soon.
 
 ## Run on Sample Data
 

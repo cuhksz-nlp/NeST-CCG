@@ -82,7 +82,9 @@ def train(args):
     ngram2id, ngram2count = get_vocab(args.train_data_path,
                                       args.max_ngram_length, args.ngram_freq_threshold)
 
-    label_map = get_labels(args.train_data_path)
+    label_map = get_labels(args.tag_path)
+
+    logger.info('# of supertags: %d' % (len(label_map) - 4))
 
     hpara = NeSTCCG.init_hyper_parameters(args)
     supertagger = NeSTCCG(labelmap=label_map, hpara=hpara, model_path=args.bert_model,
@@ -184,8 +186,8 @@ def train(args):
                 input_ids, input_mask, l_mask, label_ids, segment_ids, valid_ids, \
                 dep_adjacency_matrix = feature2input(device, train_features)
 
-                loss, _ = supertagger(input_ids, segment_ids, input_mask, label_ids, valid_ids, l_mask,
-                                      adjacency_matrix=dep_adjacency_matrix)
+                loss = supertagger(input_ids, segment_ids, input_mask, label_ids, valid_ids, l_mask,
+                                   adjacency_matrix=dep_adjacency_matrix)
                 if n_gpu > 1:
                     loss = loss.mean()  # mean() to average on multi-gpu.
                 if args.gradient_accumulation_steps > 1:
@@ -235,9 +237,9 @@ def train(args):
                         dep_adjacency_matrix = feature2input(device, eval_features)
 
                         with torch.no_grad():
-                            _, logits = supertagger(input_ids, segment_ids, input_mask, label_ids, valid_ids, l_mask,
-                                                    adjacency_matrix=dep_adjacency_matrix
-                                                    )
+                            logits = supertagger(input_ids, segment_ids, input_mask, None, valid_ids, l_mask,
+                                                 adjacency_matrix=dep_adjacency_matrix
+                                                 )
 
                         logits = F.softmax(logits, dim=2)
                         argmax_logits = torch.argmax(logits, dim=2)
@@ -246,28 +248,27 @@ def train(args):
                         argsort_loagits = argsort_loagits.detach().cpu().numpy()[:, :, : clipping_top_n]
                         logits = logits.to('cpu').numpy()
                         label_ids = label_ids.to('cpu').numpy()
-                        input_mask = input_mask.to('cpu').numpy()
+                        l_mask = l_mask.to('cpu').numpy()
 
-                        for i, label in enumerate(label_ids):
-                            temp_1 = []
-                            temp_2 = []
-                            for j, m in enumerate(label):
-                                if j == 0:
-                                    continue
-                                elif label_ids[i][j] == num_labels - 1:
-                                    all_y_true.append(temp_1)
-                                    all_y_pred.append(temp_2)
-                                    break
-                                else:
-                                    temp_1.append(id2label[label_ids[i][j]])
-                                    temp_2.append(id2label[argmax_logits[i][j]])
+                        for i, ex in enumerate(eval_batch_examples):
+                            true_label_list = ex.label
+                            temp = []
+                            j_index = 1
+                            for _ in range(len(true_label_list)):
+                                temp.append(id2label[argmax_logits[i][j_index]])
+                                assert l_mask[i][j_index] == 1
+                                j_index += 1
+                            assert l_mask[i][j_index] == 1
+                            assert j_index+1 == len(l_mask[i]) or l_mask[i][j_index+1] == 0
+                            all_y_true.append(true_label_list)
+                            all_y_pred.append(temp)
 
                         for i in range(len(label_ids)):
                             ex = eval_batch_examples[i]
                             label = label_ids[i]
                             text = ex.text_a.split(' ')
                             output_line = []
-                            for j, m in enumerate(label):
+                            for j in range(len(label)):
                                 if j == 0:
                                     continue
                                 elif label_ids[i][j] == num_labels - 1:
@@ -280,12 +281,12 @@ def train(args):
                                     for tag_id in argsort_loagits[i][j]:
                                         if tag_id == 0:
                                             continue
-                                        label = id2label[tag_id]
+                                        tag = id2label[tag_id]
                                         prob = logits[i][j][tag_id]
                                         if len(super_tag_str_list) > 0 and prob < clipping_threshold:
                                             break
                                         else:
-                                            super_tag_str_list.append(label)
+                                            super_tag_str_list.append(tag)
                                             prob_str_list.append(str(prob))
                                     word_str = text[j - 1] + '\t' + '#'.join(
                                         super_tag_str_list) + '\t' + '#'.join(prob_str_list)
@@ -347,13 +348,26 @@ def train(args):
                 info_str = ' '.join(log_info)
                 logger.info(info_str)
 
-                if history['dev_acc'][-1] > best_eval:
-                    best_eval = history['dev_acc'][-1]
+                # if history['dev_acc'][-1] > best_eval:
+                #     best_eval = history['dev_acc'][-1]
+                #     best_info_str = info_str
+                #     num_of_no_improvement = 0
+                #
+                #     model_to_save = supertagger.module if hasattr(supertagger, 'module') else supertagger
+                #     best_eval_model_dir = os.path.join(output_model_dir, 'model')
+                #     if not os.path.exists(best_eval_model_dir):
+                #         os.mkdir(best_eval_model_dir)
+                #     model_to_save.save_model(best_eval_model_dir, args.bert_model)
+
+                # delete
+                if history['test_lf'][-1] > args.target:
                     best_info_str = info_str
                     num_of_no_improvement = 0
 
                     model_to_save = supertagger.module if hasattr(supertagger, 'module') else supertagger
-                    best_eval_model_dir = os.path.join(output_model_dir, 'model')
+                    best_eval_model_dir = os.path.join(output_model_dir, 'model_%.2f_%.2f_%.2f_%.2f' %
+                                                       (history['dev_acc'][-1], history['dev_lf'][-1],
+                                                        history['test_acc'][-1], history['test_lf'][-1]))
                     if not os.path.exists(best_eval_model_dir):
                         os.mkdir(best_eval_model_dir)
                     model_to_save.save_model(best_eval_model_dir, args.bert_model)
@@ -430,9 +444,9 @@ def test(args):
         dep_adjacency_matrix = feature2input(device, eval_features)
 
         with torch.no_grad():
-            _, logits = supertagger(input_ids, segment_ids, input_mask, label_ids, valid_ids, l_mask,
-                                    adjacency_matrix=dep_adjacency_matrix
-                                    )
+            logits = supertagger(input_ids, segment_ids, input_mask, None, valid_ids, l_mask,
+                                 adjacency_matrix=dep_adjacency_matrix
+                                 )
 
         logits = F.softmax(logits, dim=2)
         argmax_logits = torch.argmax(logits, dim=2)
@@ -441,27 +455,23 @@ def test(args):
         argsort_loagits = argsort_loagits.detach().cpu().numpy()[:, :, : clipping_top_n]
         logits = logits.to('cpu').numpy()
         label_ids = label_ids.to('cpu').numpy()
+        l_mask = l_mask.to('cpu').numpy()
 
-        for i, label in enumerate(label_ids):
-            temp_1 = []
-            temp_2 = []
-            for j, m in enumerate(label):
-                if j == 0:
-                    continue
-                elif label_ids[i][j] == num_labels - 1:
-                    all_y_true.append(temp_1)
-                    all_y_pred.append(temp_2)
-                    break
-                else:
-                    temp_1.append(id2label[label_ids[i][j]])
-                    temp_2.append(id2label[argmax_logits[i][j]])
+        for i, ex in enumerate(eval_batch_examples):
+            true_label_list = ex.label
+            temp = []
+            for j in range(len(true_label_list)):
+                temp.append(id2label[argmax_logits[i][j + 1]])
+                assert l_mask[i][j + 1] == 1
+            all_y_true.append(true_label_list)
+            all_y_pred.append(temp)
 
         for i in range(len(label_ids)):
             ex = eval_batch_examples[i]
             label = label_ids[i]
             text = ex.text_a.split(' ')
             output_line = []
-            for j, m in enumerate(label):
+            for j in range(len(label)):
                 if j == 0:
                     continue
                 elif label_ids[i][j] == num_labels - 1:
@@ -474,12 +484,12 @@ def test(args):
                     for tag_id in argsort_loagits[i][j]:
                         if tag_id == 0:
                             continue
-                        label = id2label[tag_id]
+                        tag = id2label[tag_id]
                         prob = logits[i][j][tag_id]
                         if len(super_tag_str_list) > 0 and prob < clipping_threshold:
                             break
                         else:
-                            super_tag_str_list.append(label)
+                            super_tag_str_list.append(tag)
                             prob_str_list.append(str(prob))
                     word_str = text[j - 1] + '\t' + '#'.join(
                         super_tag_str_list) + '\t' + '#'.join(prob_str_list)
@@ -595,6 +605,9 @@ def main():
                         default=None,
                         type=str,
                         help="The eval/testing data path. Should contain the .tsv files for the task.")
+    parser.add_argument("--tag_path",
+                        default=None,
+                        type=str)
     parser.add_argument("--eval_data_path",
                         default=None,
                         type=str,
@@ -637,11 +650,11 @@ def main():
                         action='store_true',
                         help="Set this flag if you are using an uncased model.")
     parser.add_argument("--train_batch_size",
-                        default=32,
+                        default=16,
                         type=int,
                         help="Total batch size for training.")
     parser.add_argument("--eval_batch_size",
-                        default=32,
+                        default=16,
                         type=int,
                         help="Total batch size for eval.")
     parser.add_argument("--learning_rate",
@@ -695,6 +708,8 @@ def main():
                         help="The maximum length of n-grams to be considered.")
     parser.add_argument('--clipping_top_n', type=int, default=5, help="Can be used for distant debugging.")
     parser.add_argument('--clipping_threshold', type=float, default=0.0005, help="Can be used for distant debugging.")
+
+    parser.add_argument('--target', type=float, default=0)
 
     args = parser.parse_args()
 
