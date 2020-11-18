@@ -58,7 +58,7 @@ In our paper, we use [BERT](https://www.aclweb.org/anthology/N19-1423/) as the e
 
 For BERT, please download pre-trained BERT model from [Google](https://github.com/google-research/bert) and convert the model from the TensorFlow version to PyTorch version.
 
-For our pre-trained models, we have two versions: the first follows previous studies using the most frequent 425 supertags as the tag set ([Baidu Wangpan](https://pan.baidu.com/s/1Ss6x9W9QRtxkFWkBVnmmRQ) (passcode: vhbq), Google Drive (soming soon)); the second uses all supertags appearing in the training set ([Baidu Wangpan](https://pan.baidu.com/s/1YVvUvRPU-wgquwydlhAK0A) (passcode: u4ta), Google Drive (coming soon)). In our paper, we report the results of the first version.
+For our pre-trained models, we have two versions: the first follows previous studies using the most frequent 425 supertags as the tag set ([Baidu Wangpan](https://pan.baidu.com/s/1Ss6x9W9QRtxkFWkBVnmmRQ) (passcode: vhbq), Google Drive (soming soon)); the second uses all supertags appearing in the training set ([Baidu Wangpan](https://pan.baidu.com/s/1YVvUvRPU-wgquwydlhAK0A) (passcode: u4ta), Google Drive (coming soon)). In our paper, we report the results of the first version. Check our latest version of the paper from [arXiv](https://arxiv.org/abs/2010.06115).
 
 ## Run on Sample Data
 
