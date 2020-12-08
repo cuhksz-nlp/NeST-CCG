@@ -9,7 +9,9 @@ OUTPUT_HOME = '../data'
 if not os.path.exists(OUTPUT_HOME):
     os.mkdir(OUTPUT_HOME)
 
-# we ignore these sentences because they will cause errors when running evaluation code from C&C parser.
+# We ignore these sentences (these sentences are very short sentences/phrase)
+# because they will cause errors when running evaluation code from C&C parser.
+# We list all ignored sentences in the test set in "ignored_sentences_in_test"
 auto_ignore_id = {'wsj_0041.26', 'wsj_0041.37', 'wsj_0052.1', 'wsj_0052.5', 'wsj_0056.1', 'wsj_0056.5',
                   'wsj_0062.50', 'wsj_0085.54', 'wsj_0089.3', 'wsj_0090.24', 'wsj_2330.38', 'wsj_2366.47',
                   'wsj_2373.11', 'wsj_2377.42', 'wsj_2385.27', 'wsj_2385.29', 'wsj_2385.33', 'wsj_2385.37',

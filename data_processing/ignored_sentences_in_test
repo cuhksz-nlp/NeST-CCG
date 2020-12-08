@@ -1,0 +1,18 @@
+ID=wsj_2330.38 PARSER=GOLD NUMPARSE=1
+(<T NP 0 1> (<L N NN NN Energy N>) )
+ID=wsj_2366.47 PARSER=GOLD NUMPARSE=1
+(<T NP 0 1> (<T N 1 2> (<L N NNS NNS Odds N>) (<T N[conj] 1 2> (<L conj CC CC and conj>) (<L N NNS NNS Ends N>) ) ) )
+ID=wsj_2373.11 PARSER=GOLD NUMPARSE=1
+(<T NP 0 2> (<T NP 0 1> (<L N NNP NNP Cambridge N>) ) (<T NP[conj] 1 2> (<L , , , , ,>) (<T NP 0 1> (<T N 0 2> (<L N NNP NNP Mass N>) (<L . . . . .>) ) ) ) )
+ID=wsj_2377.42 PARSER=GOLD NUMPARSE=1
+(<T NP 0 2> (<T NP 0 1> (<L N NNP NNP Parsippany N>) ) (<T NP[conj] 1 2> (<L , , , , ,>) (<T NP 0 1> (<T N 0 2> (<L N NNP NNP N.J N>) (<L . . . . .>) ) ) ) )
+ID=wsj_2385.27 PARSER=GOLD NUMPARSE=1
+(<T NP 0 1> (<T N 0 2> (<L N NNP NNP Oregon N>) (<L : : : -- :>) ) )
+ID=wsj_2385.29 PARSER=GOLD NUMPARSE=1
+(<T NP 0 2> (<T NP 0 2> (<T NP 0 1> (<L N NNP NNP Washington N>) ) (<T NP[conj] 1 2> (<L , , , , ,>) (<T NP 0 1> (<L N NNP NNP D.C. N>) ) ) ) (<L : : : -- :>) )
+ID=wsj_2385.33 PARSER=GOLD NUMPARSE=1
+(<T NP 0 2> (<T NP 0 2> (<T NP 0 1> (<L N NNP NNP Austin N>) ) (<T NP[conj] 1 2> (<L , , , , ,>) (<T NP 0 1> (<L N NNP NNP Texas N>) ) ) ) (<L : : : -- :>) )
+ID=wsj_2385.37 PARSER=GOLD NUMPARSE=1
+(<T NP 0 1> (<T N 0 2> (<L N NNP NNP Connecticut N>) (<L : : : -- :>) ) )
+ID=wsj_2391.1 PARSER=GOLD NUMPARSE=1
+(<T NP 0 2> (<T NP 0 1> (<L N NN NN Plunge N>) ) (<L . . . ? .>) )
