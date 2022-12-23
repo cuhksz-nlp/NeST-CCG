@@ -2,7 +2,14 @@
 
 This is the implementation of [Supertagging Combinatory Categorial Grammar with Attentive Graph Convolutional Networks](https://www.aclweb.org/anthology/2020.emnlp-main.487/) at EMNLP2020.
 
-Please contact us at `yhtian@uw.edu` or `cuhksz.nlp@gmail.com` if you have any questions.
+Please contact us at `yhtian@uw.edu` if you have any questions.
+
+
+**Visit our [homepage](https://github.com/synlp/.github) to find more our recent research and softwares for NLP (e.g., pre-trained LM, POS tagging, NER, sentiment analysis, relation extraction, datasets, etc.).**
+
+## Upgrades of NeST-CCG
+
+We are improving our NeST-CCG. For updates, please visit [HERE](https://github.com/synlp/NeST-CCG).
 
 
 ## Citation
